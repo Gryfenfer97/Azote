@@ -17,7 +17,7 @@ pub fn scan_tokens(src: &String) -> Result<Vec<Token>, String>{
                 let id = get_id(c, &mut it);
                 tokens.push(Token::Id(id));
             }
-            '+' | '-' | '×' | '÷' => {
+            '+' | '-' | '×' | '÷' | '⌈' | '⌊' => {
                 tokens.push(Token::Function(c));
                 it.next();
             },
@@ -56,6 +56,15 @@ fn number<T: Iterator<Item = char>>(mut c: char, iter: &mut Peekable<T>) -> f32{
     while let Some(Ok(digit)) = iter.peek().map(|c| c.to_string().parse::<f32>()) {
         number = number * 10. + digit;
         iter.next();
+    }
+    if iter.peek() == Some(&'.'){
+        iter.next();
+        let mut i: i32 = 1;
+        while let Some(Ok(digit)) = iter.peek().map(|c| c.to_string().parse::<f32>()) {
+            number = number + digit * f32::powf(10.,-i as f32);
+            iter.next();
+            i+=1;
+        }
     }
     number * negative
 }

@@ -114,10 +114,19 @@ impl Visitor<Result<Value, String>> for Interpreter {
                 1 => {
                     return Ok(Value::MonadicFunction(MonadicFunctionHolder {
                         function: Rc::new(|v: &Value| {
-                            if let Value::Number(value) = v {
-                                return Ok(Value::Number(value / value.abs()));
+                            match v {
+                                Value::Number(value) => {return Ok(Value::Number(value / value.abs()));},
+                                Value::Array(values) => {
+                                    let mut vector: Vec<Value> = Vec::new();
+                                    for value in values{
+                                        if let Value::Number(n) = value {
+                                            vector.push(Value::Number(n / n.abs()))
+                                        }
+                                    }
+                                    return Ok(Value::Array(vector));
+                                },
+                                _ => {return Err("Domain Error".to_string());}
                             }
-                            return Err("Domain Error".to_string());
                         }),
                         node: Node::F {
                             token: token.clone(),
@@ -151,6 +160,106 @@ impl Visitor<Result<Value, String>> for Interpreter {
                 }
                 _ => return Err("Bad valence".to_string()),
             },
+            Token::Function('⌈') => match valence {
+                1 => {
+                    return Ok(Value::MonadicFunction(MonadicFunctionHolder {
+                        function: Rc::new(|v: &Value| {
+                            match v {
+                                Value::Number(value) => {return Ok(Value::Number(value.ceil()));},
+                                Value::Array(values) => {
+                                    let mut vector: Vec<Value> = Vec::new();
+                                    for value in values{
+                                        if let Value::Number(n) = value {
+                                            vector.push(Value::Number(n.ceil()))
+                                        }
+                                    }
+                                    return Ok(Value::Array(vector));
+                                },
+                                _ => {return Err("Domain Error".to_string());}
+                            }
+                        }),
+                        node: Node::F {
+                            token: token.clone(),
+                        },
+                    }));
+                }
+                2 => {
+                    return Ok(Value::DyadicFunction(DyadicFunctionHolder {
+                        function: Rc::new(|alpha, omega| {
+                            match (alpha, omega) {
+                                (Value::Number(value1), Value::Number(value2)) => {
+                                    return Ok(Value::Number(f32::max(*value1, *value2)));
+                                }
+                                (Value::Array(values1), Value::Array(values2)) => {
+                                    if values1.len() != values2.len() {return Err("Vectors don't have the same rank".to_string());}
+                                    let mut vector: Vec<Value> = Vec::new();
+                                    for i in 0..values1.len(){
+                                        if let (Value::Number(v1), Value::Number(v2)) = (&values1[i], &values2[i]) {
+                                            vector.push(Value::Number(f32::max(*v1, *v2)))
+                                        }
+                                    }
+                                    return Ok(Value::Array(vector));
+                                }
+                                _ => unreachable!()
+                            }
+                        }),
+                        node: Node::F {
+                            token: token.clone(),
+                        },
+                    }));
+                }
+                _ => return Err("Bad valence".to_string()),
+            }
+            Token::Function('⌊') => match valence {
+                1 => {
+                    return Ok(Value::MonadicFunction(MonadicFunctionHolder {
+                        function: Rc::new(|v: &Value| {
+                            match v {
+                                Value::Number(value) => {return Ok(Value::Number(value.floor()));},
+                                Value::Array(values) => {
+                                    let mut vector: Vec<Value> = Vec::new();
+                                    for value in values{
+                                        if let Value::Number(n) = value {
+                                            vector.push(Value::Number(n.floor()))
+                                        }
+                                    }
+                                    return Ok(Value::Array(vector));
+                                },
+                                _ => {return Err("Domain Error".to_string());}
+                            }
+                        }),
+                        node: Node::F {
+                            token: token.clone(),
+                        },
+                    }));
+                }
+                2 => {
+                    return Ok(Value::DyadicFunction(DyadicFunctionHolder {
+                        function: Rc::new(|alpha, omega| {
+                            match (alpha, omega) {
+                                (Value::Number(value1), Value::Number(value2)) => {
+                                    return Ok(Value::Number(f32::min(*value1, *value2)));
+                                }
+                                (Value::Array(values1), Value::Array(values2)) => {
+                                    if values1.len() != values2.len() {return Err("Vectors don't have the same rank".to_string());}
+                                    let mut vector: Vec<Value> = Vec::new();
+                                    for i in 0..values1.len(){
+                                        if let (Value::Number(v1), Value::Number(v2)) = (&values1[i], &values2[i]) {
+                                            vector.push(Value::Number(f32::min(*v1, *v2)))
+                                        }
+                                    }
+                                    return Ok(Value::Array(vector));
+                                }
+                                _ => unreachable!()
+                            }
+                        }),
+                        node: Node::F {
+                            token: token.clone(),
+                        },
+                    }));
+                }
+                _ => return Err("Bad valence".to_string()),
+            }
             _ => {
                 println!("token: {:?}", token);
                 return Err("Parsing error".to_string());
