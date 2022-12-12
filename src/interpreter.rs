@@ -1,40 +1,10 @@
 use crate::node::visit::{Acceptor, Visitor};
 use crate::node::Node;
 use crate::token::Token;
-use std::fmt;
+use crate::value::{Value, DyadicFunctionHolder, MonadicFunctionHolder};
 use std::rc::Rc;
+use crate::functions::*;
 
-pub struct MonadicFunctionHolder {
-    pub function: Rc<dyn Fn(&Value) -> Result<Value, String>>,
-    node: Node,
-}
-
-impl fmt::Debug for MonadicFunctionHolder {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:?}", self.node)
-    }
-}
-
-pub struct DyadicFunctionHolder {
-    pub function: Rc<dyn Fn(&Value, &Value) -> Result<Value, String>>,
-    node: Node,
-}
-
-impl fmt::Debug for DyadicFunctionHolder {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:?}", self.node)
-    }
-}
-
-#[derive(Debug)]
-pub enum Value {
-    Number(f32),
-    // String(String),
-    Array(Vec<Value>),
-    MonadicFunction(MonadicFunctionHolder),
-    DyadicFunction(DyadicFunctionHolder),
-    None,
-}
 
 pub struct Interpreter {
     // environment: Vec<Node>,
@@ -76,11 +46,33 @@ impl Visitor<Result<Value, String>> for Interpreter {
 
     // Evaluate a function that have only one argument
     fn visit_monad(&mut self, operator: &Node, right: &Node) -> Result<Value, String> {
+        let omega = &value_to_node(&self.visit_node(right, Some(1))?);
         match operator{
             Node::MonadicOperator{operator, child} => {
                 match operator{
                     Token::MonadicOperator('⍨') => {
-                        return self.visit_dyad(right, child.as_ref().unwrap(), right);
+                        return self.visit_dyad(omega, child.as_ref().unwrap(), omega);
+                    }
+                    Token::MonadicOperator('/') => {
+                        if let Node::Array { values } = omega {
+                            if values.len() <= 1 {return Err("trying to reduce on a single element array".to_string());}
+                            let mut value = values[0].clone();
+                            for i in 1..values.len(){
+                                value = value_to_node(&self.visit_dyad(&value, child.as_ref().unwrap(), &values[i])?);
+                            }
+                            Ok(node_to_value(&value))
+                        }
+                        else {unreachable!()}
+                    },
+                    Token::MonadicOperator('¨') => {
+                        if let Node::Array { values } = omega {
+                            let mut vector: Vec<Value> = Vec::new();
+                            for value in values {
+                                vector.push(self.visit_monad(child.as_ref().unwrap(), value)?)
+                            }
+                            Ok(Value::Array(vector))
+                        }
+                        else {unreachable!()}
                     }
                     _ => {
                         Err("Operator not implemented".to_string())
@@ -110,24 +102,10 @@ impl Visitor<Result<Value, String>> for Interpreter {
 
     fn visit_f(&mut self, token: &Token, valence: i32) -> Result<Value, String> {
         match token {
-            Token::Function('×') => match valence {
+            Token::Function('+') => match valence {
                 1 => {
                     return Ok(Value::MonadicFunction(MonadicFunctionHolder {
-                        function: Rc::new(|v: &Value| {
-                            match v {
-                                Value::Number(value) => {return Ok(Value::Number(value / value.abs()));},
-                                Value::Array(values) => {
-                                    let mut vector: Vec<Value> = Vec::new();
-                                    for value in values{
-                                        if let Value::Number(n) = value {
-                                            vector.push(Value::Number(n / n.abs()))
-                                        }
-                                    }
-                                    return Ok(Value::Array(vector));
-                                },
-                                _ => {return Err("Domain Error".to_string());}
-                            }
-                        }),
+                        function: Rc::new(conjugate),
                         node: Node::F {
                             token: token.clone(),
                         },
@@ -135,24 +113,26 @@ impl Visitor<Result<Value, String>> for Interpreter {
                 }
                 2 => {
                     return Ok(Value::DyadicFunction(DyadicFunctionHolder {
-                        function: Rc::new(|alpha, omega| {
-                            match (alpha, omega) {
-                                (Value::Number(value1), Value::Number(value2)) => {
-                                    return Ok(Value::Number(value1 * value2));
-                                }
-                                (Value::Array(values1), Value::Array(values2)) => {
-                                    if values1.len() != values2.len() {return Err("Vectors don't have the same rank".to_string());}
-                                    let mut vector: Vec<Value> = Vec::new();
-                                    for i in 0..values1.len(){
-                                        if let (Value::Number(v1), Value::Number(v2)) = (&values1[i], &values2[i]) {
-                                            vector.push(Value::Number(v1*v2))
-                                        }
-                                    }
-                                    return Ok(Value::Array(vector));
-                                }
-                                _ => unreachable!()
-                            }
-                        }),
+                        function: Rc::new(plus),
+                        node: Node::F {
+                            token: token.clone(),
+                        },
+                    }));
+                }
+                _ => return Err("Bad valence".to_string()),
+            },
+            Token::Function('×') => match valence {
+                1 => {
+                    return Ok(Value::MonadicFunction(MonadicFunctionHolder {
+                        function: Rc::new(direction),
+                        node: Node::F {
+                            token: token.clone(),
+                        },
+                    }));
+                }
+                2 => {
+                    return Ok(Value::DyadicFunction(DyadicFunctionHolder {
+                        function: Rc::new(times),
                         node: Node::F {
                             token: token.clone(),
                         },
@@ -163,21 +143,7 @@ impl Visitor<Result<Value, String>> for Interpreter {
             Token::Function('⌈') => match valence {
                 1 => {
                     return Ok(Value::MonadicFunction(MonadicFunctionHolder {
-                        function: Rc::new(|v: &Value| {
-                            match v {
-                                Value::Number(value) => {return Ok(Value::Number(value.ceil()));},
-                                Value::Array(values) => {
-                                    let mut vector: Vec<Value> = Vec::new();
-                                    for value in values{
-                                        if let Value::Number(n) = value {
-                                            vector.push(Value::Number(n.ceil()))
-                                        }
-                                    }
-                                    return Ok(Value::Array(vector));
-                                },
-                                _ => {return Err("Domain Error".to_string());}
-                            }
-                        }),
+                        function: Rc::new(ceiling),
                         node: Node::F {
                             token: token.clone(),
                         },
@@ -185,24 +151,7 @@ impl Visitor<Result<Value, String>> for Interpreter {
                 }
                 2 => {
                     return Ok(Value::DyadicFunction(DyadicFunctionHolder {
-                        function: Rc::new(|alpha, omega| {
-                            match (alpha, omega) {
-                                (Value::Number(value1), Value::Number(value2)) => {
-                                    return Ok(Value::Number(f32::max(*value1, *value2)));
-                                }
-                                (Value::Array(values1), Value::Array(values2)) => {
-                                    if values1.len() != values2.len() {return Err("Vectors don't have the same rank".to_string());}
-                                    let mut vector: Vec<Value> = Vec::new();
-                                    for i in 0..values1.len(){
-                                        if let (Value::Number(v1), Value::Number(v2)) = (&values1[i], &values2[i]) {
-                                            vector.push(Value::Number(f32::max(*v1, *v2)))
-                                        }
-                                    }
-                                    return Ok(Value::Array(vector));
-                                }
-                                _ => unreachable!()
-                            }
-                        }),
+                        function: Rc::new(maximum),
                         node: Node::F {
                             token: token.clone(),
                         },
@@ -213,21 +162,7 @@ impl Visitor<Result<Value, String>> for Interpreter {
             Token::Function('⌊') => match valence {
                 1 => {
                     return Ok(Value::MonadicFunction(MonadicFunctionHolder {
-                        function: Rc::new(|v: &Value| {
-                            match v {
-                                Value::Number(value) => {return Ok(Value::Number(value.floor()));},
-                                Value::Array(values) => {
-                                    let mut vector: Vec<Value> = Vec::new();
-                                    for value in values{
-                                        if let Value::Number(n) = value {
-                                            vector.push(Value::Number(n.floor()))
-                                        }
-                                    }
-                                    return Ok(Value::Array(vector));
-                                },
-                                _ => {return Err("Domain Error".to_string());}
-                            }
-                        }),
+                        function: Rc::new(floor),
                         node: Node::F {
                             token: token.clone(),
                         },
@@ -235,24 +170,7 @@ impl Visitor<Result<Value, String>> for Interpreter {
                 }
                 2 => {
                     return Ok(Value::DyadicFunction(DyadicFunctionHolder {
-                        function: Rc::new(|alpha, omega| {
-                            match (alpha, omega) {
-                                (Value::Number(value1), Value::Number(value2)) => {
-                                    return Ok(Value::Number(f32::min(*value1, *value2)));
-                                }
-                                (Value::Array(values1), Value::Array(values2)) => {
-                                    if values1.len() != values2.len() {return Err("Vectors don't have the same rank".to_string());}
-                                    let mut vector: Vec<Value> = Vec::new();
-                                    for i in 0..values1.len(){
-                                        if let (Value::Number(v1), Value::Number(v2)) = (&values1[i], &values2[i]) {
-                                            vector.push(Value::Number(f32::min(*v1, *v2)))
-                                        }
-                                    }
-                                    return Ok(Value::Array(vector));
-                                }
-                                _ => unreachable!()
-                            }
-                        }),
+                        function: Rc::new(minimum),
                         node: Node::F {
                             token: token.clone(),
                         },
@@ -277,3 +195,25 @@ impl Visitor<Result<Value, String>> for Interpreter {
 
 }
 
+
+
+fn value_to_node(value: &Value) -> Node{
+    match value{
+        Value::Array(values) => {return Node::Array { values: values.iter().map(|el| return value_to_node(el)).collect() }},
+        Value::Number(v) => {return Node::Scalar { token: Token::Number(*v) }}
+        _ => unreachable!()
+    }
+}
+
+fn node_to_value(node: &Node) -> Value{
+    match node{
+        Node::Array { values } => {return Value::Array(values.iter().map(|el| return node_to_value(el)).collect())}
+        Node::Scalar { token } => {
+            match token {
+                Token::Number(x) => {return Value::Number(*x);}
+                _ => todo!()
+            }
+        }
+        _ => unreachable!()
+    }
+}

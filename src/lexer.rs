@@ -21,7 +21,7 @@ pub fn scan_tokens(src: &String) -> Result<Vec<Token>, String>{
                 tokens.push(Token::Function(c));
                 it.next();
             },
-            '⍨' => {
+            '⍨' | '¨' => {
                 tokens.push(Token::MonadicOperator(c));
                 it.next();
             }
@@ -36,7 +36,16 @@ pub fn scan_tokens(src: &String) -> Result<Vec<Token>, String>{
             '⋄' => {
                 tokens.push(Token::Diamond);
                 it.next();
-            }
+            },
+            '/' | '⌿' | '\\' | '⍀' => {
+                if let Some(Token::Function(_)) = tokens.last(){
+                    tokens.push(Token::MonadicOperator(c));
+                }
+                else{
+                    tokens.push(Token::Function(c));
+                }
+                it.next();
+            },
             ' ' => {it.next();},
             _ => {
                 return Err(format!("unexpected character {}", c));
