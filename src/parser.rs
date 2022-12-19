@@ -1,42 +1,5 @@
 use crate::token::Token;
-
-#[derive(Debug, PartialEq, Clone)]
-pub enum Node {
-    Scalar {
-        token: Token,
-    },
-
-    Array {
-        values: Vec<Node>,
-    },
-
-    MonadicOperator {
-        operator: Token,
-        child: Option<Box<Node>>,
-    },
-    Dyad {
-        left: Option<Box<Node>>,
-        operator: Box<Node>,
-        right: Option<Box<Node>>,
-    },
-    F {
-        token: Token,
-    },
-    Monad {
-        operator: Box<Node>,
-        right: Option<Box<Node>>,
-    },
-    Assignement {
-        varname: Box<Node>,
-        value: Box<Node>,
-    },
-    Var {
-        token: Token,
-    },
-    Statement {
-        children: Vec<Node>,
-    },
-}
+use crate::node::Node;
 
 pub fn parse(tokens: &Vec<Token>) -> Result<Node, String> {
     let statement_list: Node = parse_statement_list(&tokens, 0)?;
@@ -60,7 +23,7 @@ fn parse_statement_list(tokens: &Vec<Token>, mut index: usize) -> Result<Node, S
 }
 
 fn parse_statement(tokens: &Vec<Token>, mut index: usize) -> Result<(Node, usize), String> {
-    println!("Parsing statement from {:?}", &tokens[index..]);
+    // println!("Parsing statement from {:?}", &tokens[index..]);
     let mut statement: Node;
     (statement, index) = parse_array(tokens, index)?;
     loop {
@@ -104,7 +67,7 @@ fn parse_statement(tokens: &Vec<Token>, mut index: usize) -> Result<(Node, usize
 }
 
 pub fn parse_array(tokens: &Vec<Token>, mut index: usize) -> Result<(Node, usize), String> {
-    println!("Parsing array from {:?}", &tokens[index..]);
+    // println!("Parsing array from {:?}", &tokens[index..]);
     let mut node: Vec<Node> = [].to_vec();
     loop {
         match tokens[index] {
@@ -141,7 +104,7 @@ pub fn parse_array(tokens: &Vec<Token>, mut index: usize) -> Result<(Node, usize
 }
 
 fn parse_function(tokens: &Vec<Token>, mut index: usize) -> Result<(Node, usize), String> {
-    println!("Parsing function from {:?}", &tokens[index..]);
+    // println!("Parsing function from {:?}", &tokens[index..]);
     let mut node: Node;
     match tokens[index] {
         Token::MonadicOperator(_) => {
@@ -164,7 +127,7 @@ fn parse_function(tokens: &Vec<Token>, mut index: usize) -> Result<(Node, usize)
 }
 
 fn parse_mop(tokens: &Vec<Token>, mut index: usize) -> Result<(Node, usize), String> {
-    println!("Parsing mop from {:?}", &tokens[index..]);
+    // println!("Parsing mop from {:?}", &tokens[index..]);
     let mop: Node = Node::MonadicOperator {
         operator: tokens[index].clone(),
         child: None,
@@ -174,7 +137,7 @@ fn parse_mop(tokens: &Vec<Token>, mut index: usize) -> Result<(Node, usize), Str
 }
 
 fn parse_f(tokens: &Vec<Token>, mut index: usize) -> Result<(Node, usize), String> {
-    println!("Parsing f from {:?}", &tokens[index..]);
+    // println!("Parsing f from {:?}", &tokens[index..]);
     let node: Node = Node::F {
         token: tokens[index].clone(),
     };
